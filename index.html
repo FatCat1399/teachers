@@ -1180,12 +1180,12 @@ function printDoc(html,orient,title){if(!html){return toast('لا توجد بي�
   _pv={html,orient,title:''};const b=$('#pvBody');b.innerHTML=html;const w=orient==='landscape'?1123:794;
   b.querySelectorAll('.doc').forEach(d=>{d.style.width=w+'px';d.style.minHeight=Math.round(orient==='landscape'?794:1123)+'px'});
   const sc=Math.min(1,(window.innerWidth-16)/w);b.style.zoom=sc;
-  const t=b.querySelector('.dt');_pv.title=title||(t?t.textContent:'نموذج');$('#pvT').textContent=_pv.title;
+  const t=b.querySelector('.dt');const wl=[...new Set(_docWho)];_docWho=[];_pv.title=(title||(t?t.textContent.trim():'نموذج'))+(wl.length===1?' - '+wl[0]:'');$('#pvT').textContent=_pv.title;
   pdApply();document.body.classList.add('pvopen');$('#pv').classList.add('show');$('#pv').scrollTop=0;if(!history.state||!history.state.pv)history.pushState({pv:1},'')}
 function pvZoom(f){const b=$('#pvBody');b.style.zoom=Math.max(0.2,Math.min(2,(parseFloat(b.style.zoom)||1)*f))}
 function pvClose(fromPop){document.body.classList.remove('pvopen');$('#pv').classList.remove('show');$('#pvBody').innerHTML='';if(!fromPop&&history.state&&history.state.pv)history.back()}
 window.addEventListener('popstate',()=>{if($('#pv').classList.contains('show'))pvClose(true)});
-function pvPrint(){let st=document.getElementById('pgsz');if(!st){st=document.createElement('style');st.id='pgsz';document.head.appendChild(st)}
+function pvPrint(){const _ot=document.title;document.title=(_pv.title||'نموذج').replace(/[\\/:*?"<>|]/g,'');setTimeout(()=>document.title=_ot,3000);let st=document.getElementById('pgsz');if(!st){st=document.createElement('style');st.id='pgsz';document.head.appendChild(st)}
   st.textContent=`@page{size:A4 ${_pv.orient==='landscape'?'landscape':'portrait'};margin:9mm}`;
   $('#print').innerHTML=_pv.html;setTimeout(()=>window.print(),200)}
 function loadScript(src){return new Promise((ok,no)=>{if(document.querySelector(`script[src="${src}"]`))return ok();const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>no(new Error('تعذر التحميل — تحقق من اتصال الإنترنت'));document.head.appendChild(s)})}
@@ -1399,6 +1399,12 @@ function exportExcel(){const x=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&
   sh.push(sheet('الإشراف',[['الأسبوع','المشرف'],...S.sup.slice().sort((a,b)=>a.week-b.week).map(d=>[+d.week,tName(d.tid)])]));
   const xml=`<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="h"><Font ss:Bold="1"/><Interior ss:Color="#E3EFEB" ss:Pattern="Solid"/></Style></Styles>${sh.join('')}</Workbook>`;
   dl(new Blob([xml],{type:'application/vnd.ms-excel'}),'سجل_المعلمين_'+hStr(todayIso(),true).replace(/\//g,'-')+'.xls');toast('تم التصدير')}
+
+/* اسم المعلم في اسم الملف */
+let _docWho=[];
+(function(){const W=(fn,getT)=>function(...a){const h=fn.apply(this,a);if(h){const t=getT(...a);if(t&&t.name)_docWho.push(t.name)}return h};
+ docEval=W(docEval,tid=>T(tid));docWork=W(docWork,tid=>T(tid));docIdp=W(docIdp,tid=>T(tid));docInterview=W(docInterview,tid=>T(tid));docSingle=W(docSingle,tid=>T(tid));
+ docVisit=W(docVisit,id=>{const v=S.visits.find(x=>x.id===id);return v&&T(v.tid)});docAcc=W(docAcc,id=>{const x=S.acc.find(y=>y.id===id);return x&&T(x.tid)})})();
 
 /* ================= DROPBOX SYNC ================= */
 const DBX_FILE='/sijil_almuallimin.json';
