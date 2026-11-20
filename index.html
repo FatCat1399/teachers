@@ -1198,7 +1198,8 @@ async function pvShare(){const btn=$('#pvShareBtn');const old=btn.textContent;bt
     for(let k=0;k<docs.length;k++){host.innerHTML='';const pg=document.createElement('div');pg.style.cssText=`width:${W}px;height:${H}px;padding:${M}px;box-sizing:border-box;background:#fff;overflow:hidden;font-size:12px;color:#000`;
       const d=docs[k].cloneNode(true);d.style.width='100%';pg.appendChild(d);host.appendChild(pg);
       const cv=await html2canvas(pg,{scale:2,backgroundColor:'#fff',useCORS:true});if(k)pdf.addPage();pdf.addImage(cv.toDataURL('image/jpeg',0.92),'JPEG',0,0,pw,phh)}
-    host.remove();const name=(_pv.title||'نموذج').replace(/[\\/:*?"<>|]/g,'')+'.pdf';const blob=pdf.output('blob');const file=new File([blob],name,{type:'application/pdf'});
+    host.remove();const name=(_pv.title||'نموذج').replace(/[\\/:*?"<>|]/g,'')+'.pdf';const blob=pdf.output('blob');const file=new File([blob],name,{type:'application/pdf'});const mob=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if(!mob){dl(blob,name);toast('تم حفظ الملف في مجلد التنزيلات باسمه العربي — يمكنك إرفاقه في واتساب ويب أو البريد');return}
     if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name}).catch(e=>{if(e.name!=='AbortError')throw e})}else{dl(blob,name);toast('تم تنزيل الملف — المشاركة غير مدعومة في هذا المتصفح')}}
   catch(e){toast(e.message||'تعذرت المشاركة')}finally{btn.disabled=false;btn.textContent=old}}
 
