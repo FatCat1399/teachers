@@ -1394,13 +1394,13 @@ function dbxCard(){const d=S.dbx||{};const on=!!d.rt;
   return `<div class="card"><h3>☁️ المزامنة التلقائية عبر Dropbox</h3>${on?`<p>✅ مرتبط${d.last?' — آخر مزامنة: '+new Date(d.last).toLocaleString('ar-SA-u-ca-islamic-umalqura'):''}</p><label class="chk"><input type="checkbox" ${d.auto!==false?'checked':''} onchange="S.dbx.auto=this.checked;save()"> مزامنة تلقائية عند كل حفظ وعند الفتح</label><div class="btns"><button class="btn" onclick="dbxSync(true)">🔄 مزامنة الآن</button><button class="btn s" onclick="dbxPull(true)">⬇️ جلب نسخة السحابة</button><button class="btn r" onclick="confirmBox('فصل الربط مع Dropbox؟',()=>{S.dbx={key:S.dbx.key};save();render()})">فصل</button></div>`
   :`<p class="mu" style="line-height:1.7">تعمل المزامنة عندما يكون البرنامج منشوراً على رابط https (مثل GitHub Pages). استخدم مفتاح تطبيق Dropbox الخاص بك (App key) وأضف في إعدادات تطبيقك في Dropbox عنوان إعادة التوجيه التالي:<br><code style="direction:ltr;display:block;background:#f3f6f5;padding:6px;border-radius:6px;word-break:break-all">${esc(dbxRedirect())}</code>الملف في Dropbox: <code>${DBX_FILE}</code></p><label class="f">App key</label><input id="dbxK" style="direction:ltr" value="${esc(d.key||'')}"><div class="btns"><button class="btn" onclick="dbxConnect()">ربط Dropbox</button></div>`}</div>`}
 async function dbxConnect(){const key=$('#dbxK').value.trim();if(!key)return toast('أدخل App key');if(!/^https:/.test(location.protocol))return toast('يجب فتح البرنامج من رابط https');
-  S.dbx={key};save();const ver=b64u(crypto.getRandomValues(new Uint8Array(32)));localStorage.setItem('smu_dbx_ver',ver);
+  S.dbx={key};localStorage.setItem(KEY,JSON.stringify(S));const ver=b64u(crypto.getRandomValues(new Uint8Array(32)));localStorage.setItem('smu_dbx_ver',ver);
   const ch=b64u(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(ver)));
   location.href='https://www.dropbox.com/oauth2/authorize?'+new URLSearchParams({client_id:key,response_type:'code',code_challenge:ch,code_challenge_method:'S256',token_access_type:'offline',redirect_uri:dbxRedirect()})}
 async function dbxHandleRedirect(){const q=new URLSearchParams(location.search);const code=q.get('code');if(!code||!S.dbx||!S.dbx.key)return false;
   history.replaceState(null,'',location.pathname+location.hash);
   try{const r=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',body:new URLSearchParams({code,grant_type:'authorization_code',code_verifier:localStorage.getItem('smu_dbx_ver')||'',client_id:S.dbx.key,redirect_uri:dbxRedirect()})});
-    const j=await r.json();if(!j.refresh_token)throw new Error(j.error_description||'فشل الربط');S.dbx.rt=j.refresh_token;S.dbx.at=j.access_token;S.dbx.exp=Date.now()+(j.expires_in-60)*1000;S.dbx.auto=true;localStorage.setItem(KEY,JSON.stringify(S));toast('تم ربط Dropbox');await dbxSync(true);return true}
+    const j=await r.json();if(!j.refresh_token)throw new Error(j.error_description||'فشل الربط');S.dbx.rt=j.refresh_token;S.dbx.at=j.access_token;S.dbx.exp=Date.now()+(j.expires_in-60)*1000;S.dbx.auto=true;localStorage.setItem(KEY,JSON.stringify(S));toast('تم ربط Dropbox — جارٍ فحص السحابة…');await dbxFirst();return true}
   catch(e){toast('تعذر ربط Dropbox: '+e.message);return false}}
 async function dbxToken(){const d=S.dbx;if(d.at&&d.exp>Date.now())return d.at;
   const r=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',body:new URLSearchParams({grant_type:'refresh_token',refresh_token:d.rt,client_id:d.key})});const j=await r.json();if(!j.access_token)throw new Error('انتهت صلاحية الربط');d.at=j.access_token;d.exp=Date.now()+(j.expires_in-60)*1000;return d.at}
@@ -1410,11 +1410,19 @@ let dbxBusy=false,dbxT;
 function dbxQueue(){if(!S.dbx||!S.dbx.rt||S.dbx.auto===false)return;clearTimeout(dbxT);dbxT=setTimeout(()=>dbxSync(false),2500)}
 async function dbxSync(manual){if(!S.dbx||!S.dbx.rt||dbxBusy)return;if(!navigator.onLine){dbxDot('err');return}dbxBusy=true;dbxDot('busy');
   try{const rem=await dbxDownload();
-    if(rem&&rem.teachers&&(rem.updated||0)>(S.updated||0)){const d=S.dbx;S=fix(rem);S.dbx=d;localStorage.setItem(KEY,JSON.stringify(S));render();if(manual)toast('تم جلب أحدث نسخة من السحابة')}
-    else if(!rem||(rem.updated||0)<(S.updated||0)){await dbxUpload();if(manual)toast('تم رفع البيانات إلى السحابة')}
+    if(hasData(rem)&&(!hasData(S)||(rem.updated||0)>(S.updated||0))){const d=S.dbx;S=fix(rem);S.dbx=d;localStorage.setItem(KEY,JSON.stringify(S));render();if(manual)toast('تم جلب أحدث نسخة من السحابة')}
+    else if(hasData(S)&&(!rem||!hasData(rem)||(rem.updated||0)<(S.updated||0))){await dbxUpload();if(manual)toast('تم رفع البيانات إلى السحابة')}
     else if(manual)toast('البيانات متطابقة');
     S.dbx.last=Date.now();localStorage.setItem(KEY,JSON.stringify(S));dbxDot('on')}
   catch(e){dbxDot('err');if(manual)toast('تعذرت المزامنة: '+e.message)}finally{dbxBusy=false}}
+const hasData=x=>!!(x&&x.teachers&&x.teachers.length);
+function dbxTake(rem,msg){const d=S.dbx;S=fix(rem);S.dbx=d;S.dbx.last=Date.now();localStorage.setItem(KEY,JSON.stringify(S));dbxDot('on');go('home',1);render();toast(msg||'تم جلب بياناتك من السحابة')}
+async function dbxFirst(){dbxDot('busy');try{const rem=await dbxDownload();
+  if(hasData(rem)&&!hasData(S))return dbxTake(rem);
+  if(hasData(rem)&&hasData(S)){dbxDot('on');openModal(`<h3>☁️ توجد بيانات في السحابة وفي هذا الجهاز</h3><p class="mu" style="line-height:1.8">السحابة: ${rem.teachers.length} منسوب، ${(rem.visits||[]).length} زيارة.<br>هذا الجهاز: ${S.teachers.length} منسوب، ${(S.visits||[]).length} زيارة.<br>أيهما تريد اعتماده؟ النسخة الأخرى ستُستبدل.</p><div class="btns"><button class="btn" id="dfC">⬇️ اعتماد نسخة السحابة</button><button class="btn s" id="dfL">⬆️ اعتماد بيانات هذا الجهاز</button></div>`);
+    $('#dfC').onclick=()=>{closeModal();dbxTake(rem)};$('#dfL').onclick=async()=>{closeModal();try{await dbxUpload();S.dbx.last=Date.now();localStorage.setItem(KEY,JSON.stringify(S));dbxDot('on');toast('تم رفع بيانات هذا الجهاز إلى السحابة')}catch(e){dbxDot('err');toast(e.message)}};return}
+  if(hasData(S)){await dbxUpload();toast('تم رفع بياناتك إلى السحابة')}else toast('السحابة فارغة وهذا الجهاز فارغ');S.dbx.last=Date.now();localStorage.setItem(KEY,JSON.stringify(S));dbxDot('on')}
+ catch(e){dbxDot('err');toast('تعذر فحص السحابة: '+e.message)}}
 async function dbxPull(){try{const rem=await dbxDownload();if(!rem)return toast('لا توجد نسخة في السحابة');confirmBox('استبدال بيانات هذا الجهاز بنسخة السحابة؟',()=>{const d=S.dbx;S=fix(rem);S.dbx=d;localStorage.setItem(KEY,JSON.stringify(S));go('home');toast('تم')})}catch(e){toast(e.message)}}
 
 /* ================= BOOT ================= */
