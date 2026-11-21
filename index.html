@@ -302,6 +302,11 @@ html.ios{-webkit-text-size-adjust:100%;text-size-adjust:100%}html.ios .mbox{max-
 #view>.credit{margin-top:auto!important;padding-top:18px;padding-bottom:0}
 main{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
 
+.dpth{font-weight:800;color:var(--p);font-size:14px;padding:10px 8px 4px;border-bottom:2px solid var(--pl);margin-top:4px}
+
+/* بطاقات الرئيسية بعرض مناسب على الجوال */
+.hero~.row>.card{flex:1 1 300px}
+
 /* ================= الاحتياط ================= */
 .sbx{--pri:#0b5d57;--pri2:#13877e;--acc:#c8a24a;--bg:#f1f5f4;--card:#fff;--txt:#1d2b2a;--mut:#6b7c7a;--line:#dfe7e5;--red:#c0392b;--org:#e67e22;--blu:#2563eb;--grn:#15803d;--r:14px}
 .sbx button,.sbx input,.sbx select,.sbx textarea{font-family:inherit;font-size:inherit}
@@ -421,6 +426,13 @@ main{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
 .sbx{--pri:#0f5c4d;--pri2:#167a66;--acc:#c8962e}
 
 .sbfno{text-align:center;font-size:11px;font-weight:700;color:#444;margin:-6px 0 8px}
+/* شريط الاحتياط اليومي الثابت أعلى الصفحة */
+.sbtop{display:flex;flex-direction:column;gap:6px;padding:2px 0}
+.sbtop .sbtd{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;justify-content:center;text-align:center}
+.sbtop .sbtd b{color:var(--pri);font-size:15px}.sbtop .sbtd span{font-size:13px}
+.sbtop .sbacts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.sbtop .sbacts .btn{padding:8px 4px;font-size:13px;white-space:nowrap;width:100%}
+.sbtop .sbacts .btn:disabled{opacity:.45}
 
 </style>
 </head>
@@ -513,7 +525,16 @@ function saveSoon(){clearTimeout(saveT);saveT=setTimeout(save,350)}
 /* ---------- teachers ---------- */
 const T = id => S.teachers.find(t => t.id === id);
 const tName = id => (T(id)||{}).name || '';
-function sortedTeachers(filterRole){return S.teachers.filter(t=>!filterRole||t.role===filterRole).slice().sort((a,b)=>(a.order||0)-(b.order||0))}
+/* ترتيب المنسوبين حسب الأقسام: الطاقم الإداري أولاً، ثم المعلمون بالتخصص (العلمية ثم الأدبية ثم غيرها) */
+const DEPT_ROLE={'وكيل':1,'موجه طلابي':2,'رائد نشاط':3,'محضر مختبر':4,'إداري':5};
+const DEPT_SPEC=[['الأحياء',['أحياء','احياء']],['الفيزياء',['فيزياء']],['الكيمياء',['كيمياء']],['الرياضيات',['رياضيات']],['العلوم',['علوم','الأرض والفضاء']],['الحاسب',['حاسب','حاسوب','تقنية رقمية','تقنية']],
+ ['اللغة الإنجليزية',['إنجليزي','انجليزي','الإنجليزية']],['اللغة العربية',['لغة عربية','عربي','العربية']],['الدراسات الإسلامية',['إسلاميات','اسلاميات','إسلامية','قرآن']],['الاجتماعيات',['اجتماعيات','اجتماعية','تاريخ','جغرافيا']],
+ ['التربية البدنية',['بدنية','بدني']],['التربية الفنية',['فنية','فني']],['المهارات',['مهارات']]];
+function deptIdx(t){if(t.role!=='معلم')return -1;const sp=norm(t.spec||'');const i=DEPT_SPEC.findIndex(g=>g[1].some(k=>sp.includes(norm(k))));return i<0?DEPT_SPEC.length:i}
+function deptName(t){const i=deptIdx(t);return i<0?'الطاقم الإداري':i<DEPT_SPEC.length?DEPT_SPEC[i][0]:'تخصصات أخرى'}
+function deptCmp(a,b){const ra=a.role==='معلم'?10+deptIdx(a):(DEPT_ROLE[a.role]||6),rb=b.role==='معلم'?10+deptIdx(b):(DEPT_ROLE[b.role]||6);if(ra!==rb)return ra-rb;
+  if(a.role==='معلم'&&deptIdx(a)===DEPT_SPEC.length&&(a.spec||'')!==(b.spec||''))return String(a.spec||'').localeCompare(String(b.spec||''),'ar');return (a.order||0)-(b.order||0)}
+function sortedTeachers(filterRole){return S.teachers.filter(t=>!filterRole||t.role===filterRole).slice().sort(S.school.deptSort===false?(a,b)=>(a.order||0)-(b.order||0):deptCmp)}
 function roleOf(spec){spec=spec||'';if(/وكيل/.test(spec))return 'وكيل';if(/موجه|مرشد/.test(spec))return 'موجه طلابي';if(/رائد/.test(spec))return 'رائد نشاط';if(/مختبر/.test(spec))return 'محضر مختبر';if(/إدارة|ادارة|مكتبة|مصادر|سكرتير|إداري/.test(spec))return 'إداري';return 'معلم'}
 function intTypeOf(t){if(!t)return 'teacher';return {'محضر مختبر':'lab','موجه طلابي':'counselor','وكيل':'deputy','رائد نشاط':'activity'}[t.role]||'teacher'}
 function tSelect(id, cur, onchange, opts={}){
@@ -617,11 +638,11 @@ function catBar(page,cur,extra=''){const t=T(cur);const r=t?t.role:'';return `<d
 function catGo(page,role,extra){const L=sortedTeachers(role);if(!L.length)return toast('لا يوجد منسوبون في فئة «'+role+'» — حدّد الفئة من صفحة المعلمين');const cur=window._lastT&&T(window._lastT);go(page+'/'+(cur&&cur.role===role?cur.id:L[0].id)+extra,1)}
 function topBar(h){return `<div class="tbar">${h}</div>`}
 const SECTIONS=[
- {k:'data',n:'البيانات',ic:'🗂️',t:['basic','teachers','weeks','plan']},
+ {k:'data',n:'البيانات',ic:'🗂️',t:['basic','weeks','teachers','sbtt','sbrooms','plan']},
  {k:'fol',n:'الإشراف',ic:'🛡️',t:['svweek','svday','svall','svset']},
  {k:'vis',n:'الزيارات',ic:'🏫',t:['visits','visitform','work','ext']},
  {k:'eval',n:'التقييم',ic:'📊',t:['orient','eval','idp','intsched','interview','att','acc']},
- {k:'stb',n:'الاحتياط',ic:'🔁',t:['sbdaily','sbroster','sbtt','sbnames','sbrooms','sbrep','sbset']},
+ {k:'stb',n:'الاحتياط',ic:'🔁',t:['sbdaily','sbroster','sbrep']},
  {k:'rep',n:'التقارير',ic:'🖨️',t:['reports']},
  {k:'set',n:'الإعدادات',ic:'⚙️',t:['settings']}];
 const SEC_ALIAS={profile:'teachers',visit:'visits',visitnew:'visits',forms:'basic'};
@@ -884,7 +905,7 @@ function stdLib(st,j,fk){if(st.shared&&fk&&!['teacher','activity'].includes(fk))
  if(st.shared){const i=C.stds.findIndex(s=>s.name===st.shared);return IND_LIB[i][j]||IND_LIB[i][0]}return st.lib}
 
 /* ================= HOME ================= */
-const TILES=[['basic','البيانات الأساسية','🏛️'],['weeks','الأسابيع الدراسية','📆'],['teachers','المعلمون والإداريون','👥'],['eval','تقييم الأداء الوظيفي','📊'],['visitform','استمارة دعم وتطوير','📝'],['visits','الزيارات الصفية','🏫'],['work','متابعة أعمال المعلم','📋'],['idp','خطة التطوير الفردية IDP','🎯'],['interview','محاضر المقابلة','🗣️'],['intsched','جدول المقابلات','🗓️'],['orient','التهيئة','🤝'],['plan','الخطة الإشرافية','🧭'],['att','انتظام المعلمين','⏱️'],['svweek','جدول الإشراف الأسبوعي','🛡️'],['svday','تقرير المناوبة اليومي','📒'],['svall','الجدول الكامل للإشراف','🗂️'],['svset','إعداد الإشراف والمناوبة','⚙️'],['acc','المساءلة','✉️'],['ext','فريق التقويم الخارجي','🧾'],['reports','التقارير والطباعة','🖨️'],['sbdaily','الاحتياط اليومي','📝'],['sbroster','جدول الانتظار','🗓️'],['sbtt','جداول الحصص','📚'],['sbnames','أسماء المنتظرين والجوالات','📱'],['sbrooms','القاعات','🚪'],['sbrep','تقارير الاحتياط','📊'],['sbset','إعدادات الاحتياط','🔧'],['settings','الإعدادات والنسخ','⚙️']];
+const TILES=[['basic','البيانات الأساسية','🏛️'],['weeks','الأسابيع الدراسية','📆'],['teachers','المعلمون والإداريون','👥'],['eval','تقييم الأداء الوظيفي','📊'],['visitform','استمارة دعم وتطوير','📝'],['visits','الزيارات الصفية','🏫'],['work','متابعة أعمال المعلم','📋'],['idp','خطة التطوير الفردية IDP','🎯'],['interview','محاضر المقابلة','🗣️'],['intsched','جدول المقابلات','🗓️'],['orient','التهيئة','🤝'],['plan','الخطة الإشرافية','🧭'],['att','انتظام المعلمين','⏱️'],['svweek','جدول الإشراف الأسبوعي','🛡️'],['svday','تقرير المناوبة اليومي','📒'],['svall','الجدول الكامل للإشراف','🗂️'],['svset','إعداد الإشراف والمناوبة','⚙️'],['acc','المساءلة','✉️'],['ext','فريق التقويم الخارجي','🧾'],['reports','التقارير والطباعة','🖨️'],['sbdaily','الاحتياط اليومي','📝'],['sbroster','جدول الانتظار','🗓️'],['sbtt','جداول الحصص','📚'],['sbrooms','القاعات','🚪'],['sbrep','تقارير الاحتياط','📊'],['settings','الإعدادات والنسخ','⚙️']];
 PAGES.home=function(){
   const tc=S.teachers.length;let half=0,fin=0,sum=0,cnt=0;const dist=[0,0,0,0,0,0];
   S.teachers.forEach(t=>{if(getEval(t.id,'half'))half++;if(getEval(t.id,'final'))fin++;const b=bestEval(t.id);if(b&&b.c.full){sum+=b.c.grade;cnt++;dist[evLvl(b.c)]++}});
@@ -894,7 +915,7 @@ PAGES.home=function(){
   const up=[];Object.entries(S.splan||{}).forEach(([tid,p])=>{if(T(tid)&&p.prop&&p.prop>=td&&p.prop<=addDays(td,7)&&planVal(tid,'visit')!==1)up.push([p.prop,tid])});up.sort();
   const notVisited=S.teachers.filter(t=>t.role==='معلم'&&!S.visits.some(v=>v.tid===t.id&&isCurY(v)));
   let h=`<div class="hero"><div class="herodate"><span>📅 ${dayName(td)}</span><b>${hStr(td)}</b>${(()=>{const w=weekOf(td);return w?`<span>الأسبوع ${typeof ORD!=='undefined'&&ORD[w]||w}</span>`:''})()}</div><div class="stats"><div class="stat nvst" onclick="go('teachers')"><b>${tc}</b><span>منسوب ›</span></div><div class="stat"><b>${half}</b><span>تقييم نصف سنوي</span></div><div class="stat"><b>${fin}</b><span>تقييم نهائي</span></div><div class="stat"><b>${S.visits.length}</b><span>زيارة صفية (${visited} معلم)</span></div><div class="stat"><b>${cnt?num(sum/cnt):'—'}</b><span>متوسط الأداء من 5</span></div><div class="stat nvst" onclick="nvList()"><b>${notVisited.length}</b><span>معلم لم يُزر بعد ›</span></div></div></div>
-  ${SECTIONS.map(s=>`<div class="sech">${s.ic} ${s.n}</div><div class="tiles">${s.t.map(x=>tileHtml(x)).join('')}</div>`).join('')}`;
+  `;
   h+=`<div class="row" style="margin-top:12px;align-items:stretch">`;
   h+=`<div class="card"><h3>📌 اليوم</h3><div class="kv"><b>المناوب</b><span>${duty.length?esc(duty.join('، ')):'—'}</span><b>الإشراف (أسبوع ${wk||'—'})</b><span>${sup.length?esc(sup.join('، ')):'—'}</span></div></div>`;
   h+=`<div class="card"><h3>📅 زيارات مقترحة خلال 7 أيام</h3>${up.length?up.slice(0,8).map(([d,t])=>`<div class="mu" style="padding:3px 0">${hStr(d)} — <a href="javascript:newVisit('${t}')">${esc(tName(t))}</a></div>`).join(''):'<div class="mu">لا يوجد</div>'}</div>`;
@@ -912,9 +933,15 @@ PAGES.teachers=function(){
   const list=sortedTeachers().filter(t=>(!tRole||t.role===tRole)&&(!tFilter||norm(t.name+' '+t.spec).includes(norm(tFilter))));
   let h=`<div class="card"><div class="row"><input type="search" placeholder="بحث بالاسم أو التخصص" value="${esc(tFilter)}" oninput="tFilter=this.value;clearTimeout(window._tf);window._tf=setTimeout(()=>{PAGES.teachers();const i=document.querySelector('#view input[type=search]');i.focus();i.setSelectionRange(i.value.length,i.value.length)},250)">
    <select onchange="tRole=this.value;PAGES.teachers()"><option value="">كل الفئات</option>${ROLES.map(r=>`<option ${r===tRole?'selected':''}>${r}</option>`).join('')}</select></div>
-   <div class="btns"><button class="btn" onclick="editTeacher()">＋ إضافة</button><button class="btn s" onclick="importTeachers()">📥 استيراد (Excel / صورة / نص)</button><button class="btn s" onclick="printSign()">🖨️ كشف توقيع</button></div></div>
+   <div class="btns"><button class="btn" onclick="editTeacher()">＋ إضافة</button><button class="btn s" onclick="printSign()">🖨️ كشف توقيع</button></div>
+   <label class="chk" style="margin-top:6px"><input type="checkbox" ${S.school.deptSort!==false?'checked':''} onchange="S.school.deptSort=this.checked;save();PAGES.teachers()"> ترتيب حسب الأقسام (الطاقم الإداري، ثم العلمية: الأحياء، الفيزياء، الكيمياء، الرياضيات، ثم الأدبية…)</label></div>
+   <details class="card" ${S.teachers.length?'':'open'}><summary style="font-size:15px;font-weight:700;color:var(--p)">📥 استيراد المعلمين والإداريين من Excel</summary>
+   <ol class="mu" style="line-height:2;margin:8px 0;padding-inline-start:20px"><li>اضغط «تحميل نموذج Excel» واحفظ الملف.</li><li>افتحه وعبّئ ورقة «المنسوبون»: <b>الاسم</b> (إلزامي)، <b>التخصص</b> (مثل: أحياء، رياضيات، لغة عربية)، <b>الفئة</b> (معلم، وكيل، موجه طلابي، رائد نشاط، محضر مختبر، إداري)، <b>رقم الهوية</b> و<b>الجوال</b> (اختياريان).</li><li>ارجع هنا واضغط «اختيار الملف المعبّأ»، راجع الأسماء ثم اضغط «استيراد».</li></ol>
+   <table class="tbl" style="font-size:12px;margin-bottom:8px"><tr><th>م</th><th>الاسم</th><th>التخصص</th><th>الفئة</th><th>رقم الهوية</th><th>رقم الجوال</th></tr><tr><td>1</td><td>محمد أحمد علي الغامدي</td><td>رياضيات</td><td>معلم</td><td>10xxxxxxxx</td><td>05xxxxxxxx</td></tr></table>
+   <div class="btns"><button class="btn" onclick="dlTemplate()">⬇️ تحميل نموذج Excel</button><button class="btn s" onclick="importTeachers()">📂 اختيار الملف المعبّأ / صورة / نص</button></div></details>
    <div class="card list" style="padding:4px 8px"><div class="mu" style="padding:6px">العدد: ${list.length}</div>`;
-  h+=list.map(t=>{const b=bestEval(t.id);return `<div class="it" onclick="go('profile/${t.id}')"><div class="av">${esc((t.name||'؟')[0])}</div><div class="grow"><b>${esc(t.name)}</b><div class="mu">${esc(t.spec||'')} · ${esc(t.role)}</div></div>${b?`<span class="badge b${evLvl(b.c)}">${num(b.c.grade)}</span>`:''}<button class="btn s sm" onclick="event.stopPropagation();editTeacher('${t.id}')">✎</button></div>`}).join('')||'<div class="empty">لا يوجد</div>';
+  let _dp='';const grp=S.school.deptSort!==false&&!tFilter;
+  h+=list.map(t=>{const b=bestEval(t.id);const dn=grp?deptName(t):'';const hd=dn&&dn!==_dp?`<div class="dpth">${esc(dn)} <span class="mu">(${list.filter(x=>deptName(x)===dn).length})</span></div>`:'';_dp=dn||_dp;return hd+`<div class="it" onclick="go('profile/${t.id}')"><div class="av">${esc((t.name||'؟')[0])}</div><div class="grow"><b>${esc(t.name)}</b><div class="mu">${esc(t.spec||'')} · ${esc(t.role)}</div></div>${b?`<span class="badge b${evLvl(b.c)}">${num(b.c.grade)}</span>`:''}<button class="btn s sm" onclick="event.stopPropagation();editTeacher('${t.id}')">✎</button></div>`}).join('')||'<div class="empty">لا يوجد</div>';
   setView('المعلمون والإداريون',h+'</div>');
 };
 function editTeacher(id){const t=id?T(id):{name:'',spec:'',role:'معلم',nid:'',phone:''};
@@ -927,7 +954,7 @@ function editTeacher(id){const t=id?T(id):{name:'',spec:'',role:'معلم',nid:'
   $('#etOk').onclick=()=>{const n=$('#etN').value.trim();if(!n)return toast('اكتب الاسم');
     if(S.teachers.some(x=>x.id!==id&&norm(x.name)===norm(n)))return toast('الاسم موجود مسبقاً');
     const o={name:n,spec:$('#etS').value.trim(),role:$('#etR').value,nid:$('#etI').value.trim(),phone:$('#etP').value.trim()};
-    if(id)Object.assign(T(id),o);else S.teachers.push(Object.assign({id:'t'+uid(),order:(Math.max(0,...S.teachers.map(x=>x.order||0))+1)},o));
+    if(id){const old=T(id).name;Object.assign(T(id),o);if(old!==o.name&&typeof sb_renameTeacher==='function')sb_renameTeacher(old,o.name)}else S.teachers.push(Object.assign({id:'t'+uid(),order:(Math.max(0,...S.teachers.map(x=>x.order||0))+1)},o));
     save();closeModal();render();toast('تم الحفظ')};
   if(id)$('#etDel').onclick=()=>confirmBox(`حذف «${esc(t.name)}» وجميع بياناته (التقييمات والزيارات...)؟`,()=>{delTeacher(id);go('teachers')});
 }
@@ -1072,6 +1099,7 @@ PAGES.basic=function(){const s=S.school;
   h+=`<div class="card"><h3>👤 الإدارة المدرسية (تظهر في تواقيع النماذج)</h3><div class="row">${f('principal','مدير المدرسة')}</div>
    <div class="row" style="margin-top:8px">${f('deputy','اسم المقيّم (وكيل الشؤون التعليمية)')}${f('deputyTitle','مسمى المقيّم في النماذج')}</div>
    <div class="row" style="margin-top:8px">${f('schoolDeputy','وكيل الشؤون المدرسية (يوقّع جداول المناوبة والإشراف)')}</div></div>`;
+  h+=`<div class="card"><h3>🔁 نموذج الاحتياط (توزيع حصص الانتظار)</h3><p class="mu">الأسماء والجوالات من «المعلمون والإداريون»، والأسابيع من «الأسابيع الدراسية»، والجداول والقاعات من «جداول الحصص» و«القاعات».</p><div class="row">${f('sbFormTitle','عنوان النموذج','placeholder="سجل توزيع حصص الانتظار"')}${f('sbFormNo','رقم النموذج','placeholder="نموذج رقم ( 7 )"')}${f('sbFormCode','رمز النموذج')}</div></div>`;
   h+=`<div class="card"><h3>🖨️ الطباعة</h3><div style="margin-bottom:10px"><label class="f">شكل النماذج المطبوعة</label><select onchange="S.school.frame=this.value;save()"><option value="on" ${s.frame!=='off'?'selected':''}>الورق الرسمي (البسملة والشعار وإطار حول الصفحة)</option><option value="off" ${s.frame==='off'?'selected':''}>الترويسة البسيطة (بدون إطار)</option></select></div><div><label class="f">تذييل النماذج المطبوعة (العنوان والهاتف) — سطر واحد بحد أقصى ${FOOT_MAX} حرفاً</label><input maxlength="${FOOT_MAX}" value="${esc((s.footer||'').slice(0,FOOT_MAX))}" oninput="S.school.footer=this.value.slice(0,FOOT_MAX);document.getElementById('ftC').textContent=this.value.length+' / '+FOOT_MAX;document.getElementById('ftC').style.color=this.value.length>=FOOT_MAX?'var(--red)':'';saveSoon()"><div class="mu" id="ftC" style="text-align:left;margin-top:3px">${(s.footer||'').length} / ${FOOT_MAX}</div></div>
    </div>`;
   h+=`<div class="card"><div class="kv"><b>عدد المنسوبين</b><span>${S.teachers.length}</span><b>المعلمون</b><span>${S.teachers.filter(t=>t.role==='معلم').length}</span><b>الإداريون والوكلاء وغيرهم</b><span>${S.teachers.filter(t=>t.role!=='معلم').length}</span></div><div class="btns"><button class="btn s" onclick="go('teachers')">👥 إدارة المنسوبين</button></div></div>`;
@@ -1647,7 +1675,7 @@ var SB_SEED=null;
 function sb_save(){save()}
 function sb_render(){const y=window.scrollY;render();window.scrollTo(0,y)}
 function sb_hdr(t,sub){return sub?`<p class="muted sbsub">${sub}</p>`:''}
-const SB_ROUTE={daily:'sbdaily',roster:'sbroster',timetable:'sbtt',teachers:'sbnames',rooms:'sbrooms',reports:'sbrep',settings:'sbset',home:'sec/stb'};
+const SB_ROUTE={daily:'sbdaily',roster:'sbroster',timetable:'sbtt',teachers:'teachers',rooms:'sbrooms',reports:'sbrep',settings:'basic',home:'sec/stb'};
 function sb_go(p){go(SB_ROUTE[p]||'sec/stb')}
 function sb_layer(){let l=document.getElementById('sbLayer');if(!l){l=document.createElement('div');l.id='sbLayer';l.className='sbx';document.body.appendChild(l)}return l}
 function sb_showUndo(msg){let u=document.getElementById('undo');if(!u){u=document.createElement('div');u.id='undo';sb_layer().appendChild(u)}
@@ -1659,12 +1687,50 @@ const sb_DAYS = ['الأحد','الإثنين','الثلاثاء','الأربع�
 const sb_PNAMES = ['الأولى','الثانية','الثالثة','الرابعة','الخامسة','السادسة','السابعة'];
 const sb_HMONTHS = ['محرم','صفر','ربيع الأول','ربيع الآخر','جمادى الأولى','جمادى الآخرة','رجب','شعبان','رمضان','شوال','ذو القعدة','ذو الحجة'];
 const sb_DUPC = ['#8b0000','#b22222','#cd5c5c','#dc143c','#ff0000','#ff4500','#ff7f50'];
-function sb_fixDB(d){
-  d.settings=d.settings||{}; d.weeks=d.weeks||[]; d.teachers=d.teachers||[]; d.timetable=d.timetable||{};
-  d.rooms=d.rooms||[]; d.roster=d.roster||[]; for(let i=0;i<5;i++){d.roster[i]=d.roster[i]||[];for(let p=0;p<7;p++)d.roster[i][p]=d.roster[i][p]||[]}
-  d.lab=d.lab||[]; d.records=d.records||{}; d.phones=d.phones||{}; d.sent=d.sent||{};
-  return d;
-}
+/* ---- قاعدة بيانات موحّدة: الأسماء والجوالات من «المعلمون والإداريون»، والأسابيع من «الأسابيع الدراسية»،
+   وبيانات المدرسة من «البيانات الأساسية». قسم الاحتياط يحفظ فقط: الجداول والقاعات وجدول الانتظار والغياب واحتياط الاحتياط ---- */
+let sb_DRY=false,sb_tmp=[];
+function sb_T(){return sortedTeachers().map(t=>t.name).concat(sb_tmp)}
+function sb_W(){return calWeeks().map(w=>w.start).sort()}
+function sb_tBy(n){return S.teachers.find(t=>t.name===n)}
+const sb_PH=new Proxy({},{get:(o,n)=>{const t=typeof n==='string'&&sb_tBy(n);return t&&t.phone?t.phone:undefined},set:(o,n,v)=>{const t=sb_tBy(n);if(t)t.phone=String(v||'');return true},deleteProperty:(o,n)=>{const t=sb_tBy(n);if(t)t.phone='';return true},has:(o,n)=>!!(sb_tBy(n)||{}).phone,ownKeys:()=>S.teachers.filter(t=>t.phone).map(t=>t.name),getOwnPropertyDescriptor:(o,n)=>{const t=sb_tBy(n);return t&&t.phone?{value:t.phone,enumerable:true,configurable:true,writable:true}:undefined}});
+function sb_addTeacher(n){if(sb_T().includes(n))return n;if(sb_DRY){sb_tmp.push(n);return n}
+  S.teachers.push({id:'t'+uid(),order:Math.max(0,...S.teachers.map(x=>x.order||0))+1,name:n,spec:'',role:'معلم',nid:'',phone:''});return n}
+/* مطابقة اسم من الاحتياط باسم في سجل المعلمين (يتجاهل بن والهمزات والتاء المربوطة، ويقبل الاسم المختصر) */
+function sb_match(n){const k=x=>sb_normName(x).replace(/\s/g,'');const tk=x=>sb_normName(x).split(' ').filter(Boolean);
+  let t=S.teachers.find(x=>k(x.name)===k(n));if(t)return t;const a=tk(n);
+  const sub=(s,l)=>{let i=0;for(const w of l){if(w===s[i])i++}return i===s.length};
+  const c=S.teachers.filter(x=>{const b=tk(x.name);if(!a.length||!b.length||a[0]!==b[0]||a[a.length-1]!==b[b.length-1])return false;return a.length<=b.length?sub(a,b):sub(b,a)});
+  return c.length===1?c[0]:null}
+function sb_renameIn(d,o,n){
+  if(d.timetable&&d.timetable[o]){if(!d.timetable[n])d.timetable[n]=d.timetable[o];delete d.timetable[o]}
+  (d.roster||[]).forEach(x=>x.forEach(L=>L.forEach((v,i)=>{if(v===o)L[i]=n})));
+  d.lab=(d.lab||[]).map(x=>x===o?n:x);
+  Object.values(d.records||{}).forEach(r=>{r.absent=(r.absent||[]).map(x=>x===o?n:x);r.exempt=(r.exempt||[]).map(x=>x===o?n:x);
+    const ov={};Object.keys(r.ov||{}).forEach(k=>{const [t,p]=k.split('|');ov[(t===o?n:t)+'|'+p]=r.ov[k]===o?n:r.ov[k]});r.ov=ov;
+    const cc={};Object.keys(r.cancel||{}).forEach(k=>{const [t,p]=k.split('|');cc[(t===o?n:t)+'|'+p]=1});r.cancel=cc;});
+  Object.values(d.sent||{}).forEach(m=>{if(m[o]){m[n]=m[o];delete m[o]}})}
+/* دمج بيانات قديمة (من تطبيق سجل الانتظار) في قاعدة البيانات الموحّدة مرة واحدة */
+function sb_unify(d){const own=k=>Object.prototype.hasOwnProperty.call(d,k)&&Object.getOwnPropertyDescriptor(d,k).enumerable;
+  if(!own('teachers')&&!own('phones')&&!own('weeks')&&!own('settings'))return {added:[],renamed:[]};
+  const added=[],renamed=[];const names=new Set();
+  (d.teachers||[]).forEach(n=>names.add(n));Object.keys(d.timetable||{}).forEach(n=>names.add(n));(d.roster||[]).forEach(x=>(x||[]).forEach(L=>(L||[]).forEach(n=>names.add(n))));(d.lab||[]).forEach(n=>names.add(n));
+  Object.values(d.records||{}).forEach(r=>{(r.absent||[]).concat(r.exempt||[]).forEach(n=>names.add(n));Object.values(r.ov||{}).forEach(n=>names.add(n))});
+  const ph=d.phones||{};
+  [...names].filter(n=>n&&n!=='-'&&n!=='0').forEach(n=>{const t=sb_match(n);let nm=n;
+    if(t){if(t.name!==n){sb_renameIn(d,n,t.name);renamed.push([n,t.name]);nm=t.name}}else{const was=sb_DRY;sb_DRY=false;sb_addTeacher(n);sb_DRY=was;added.push(n)}
+    const tt=sb_tBy(nm);if(tt&&ph[n]&&!tt.phone)tt.phone=ph[n]});
+  const st=d.settings||{};['formTitle','formNo','formCode'].forEach(k=>{const K='sb'+k[0].toUpperCase()+k.slice(1);if(st[k]&&!S.school[K])S.school[K]=st[k]});
+  if(!calWeeks().length&&(d.weeks||[]).length){S.cal.t1=d.weeks.slice().sort().map(w=>{let x=w;while(sb_wday(x)!==0)x=sb_addDays(x,-1);return {start:x,off:[false,false,false,false,false]}});syncSem()}
+  delete d.teachers;delete d.phones;delete d.weeks;delete d.settings;return {added,renamed}}
+function sb_fixDB(d){d=d||{};const u=sb_unify(d);
+  d.timetable=d.timetable||{};d.rooms=d.rooms||[];d.roster=d.roster||[];for(let i=0;i<5;i++){d.roster[i]=d.roster[i]||[];for(let p=0;p<7;p++)d.roster[i][p]=d.roster[i][p]||[]}
+  d.lab=d.lab||[];d.records=d.records||{};d.sent=d.sent||{};
+  Object.defineProperty(d,'teachers',{get:sb_T,enumerable:false,configurable:true});
+  Object.defineProperty(d,'weeks',{get:sb_W,enumerable:false,configurable:true});
+  Object.defineProperty(d,'phones',{get:()=>sb_PH,enumerable:false,configurable:true});
+  if(u.added.length||u.renamed.length)window._sbUnify=u;
+  return d}
 /* ---- التواريخ ---- */
 function sb_iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function sb_pd(s){const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d,12)}
@@ -1801,7 +1867,9 @@ SBP.daily=()=>{
   if(!sb_curDate) sb_curDate=sb_defaultDate();
   const c=sb_compute(sb_curDate), r=sb_rec(sb_curDate)||{absent:[],exempt:[]}, wi=sb_weekOf(sb_curDate);
   const week=wi>=0?S.stb.weeks[wi]:null;
-  let h=sb_hdr('📝 الاحتياط اليومي',`سجل توزيع حصص الانتظار — نموذج رقم ( 7 )`)+'<main>';
+  let h='<main>';
+  {const has=c.valid&&c.forms.length;h+=topBar(`<div class="sbx sbtop"><div class="sbtd"><b>${c.valid?'يوم '+sb_DAYS[c.d]:'ليس يوم دراسة'}</b><span>${sb_hijri(sb_curDate)}</span><span class="muted">${c.valid?`غائب: ${r.absent.length} · حصص: ${c.total}${c.none?` · <b style="color:var(--org)">بدون منتظر: ${c.none}</b>`:''}`:''}</span></div>
+    <div class="sbacts"><button class="btn sm" onclick="sb_saveDay()" ${has?'':'disabled'}>💾 حفظ</button><button class="btn gold sm" onclick="sb_printDay()" ${has?'':'disabled'}>🖨️ طباعة</button><button class="btn wa sm" onclick="sb_shareDay()" ${has?'':'disabled'}>💬 مشاركة</button><button class="btn ghost sm" onclick="sb_checkDup()" ${has?'':'disabled'}>🔍 التكرار</button></div></div>`)}
   h+=`<div class="card"><h3>📅 اختيار اليوم</h3>
     <div class="row"><select class="f" style="flex:1" onchange="sb_pickWeek(this.value)">${S.stb.weeks.map((w,i)=>`<option value="${i}" ${i===wi?'selected':''}>الأسبوع ${i+1} — ${sb_hijri(w)}</option>`).join('')}${wi<0?'<option selected>تاريخ خارج الأسابيع</option>':''}</select>
     <button class="btn ghost sm" onclick="sb_hijriPicker('اختيار تاريخ هجري',sb_curDate,d=>{sb_curDate=d;sb_render()})">📆 تاريخ آخر</button></div>
@@ -1831,11 +1899,6 @@ SBP.daily=()=>{
       });
       h+='</div>';
     });
-    if(c.forms.length) h+=`<div class="acts">
-      <button class="btn" onclick="sb_saveDay()">💾 حفظ</button>
-      <button class="btn gold" onclick="sb_printDay()">🖨️ طباعة</button>
-      <button class="btn wa" onclick="sb_shareDay()">💬 مشاركة</button>
-      <button class="btn ghost" onclick="sb_checkDup()">🔍 التكرار</button></div>`;
   } else if(sb_dailyTab==='byst'){
     const {g,names}=sb_stGroups(c), SM=sb_sentMap(), noPh=names.filter(n=>!S.stb.phones[n]), done=names.filter(n=>SM[n]).length;
     if(names.length) h+=`<div class="card"><h3>📤 إرسال خاص لكل منتظر<span class="sp"></span><span class="muted">${done} / ${names.length}</span></h3>
@@ -1880,7 +1943,7 @@ function sb_slotMenu(fi,p){
 function sb_saveDay(){sb_save();toast('تم حفظ الغياب بنجاح ✅')}
 function sb_checkDup(){const c=sb_compute(sb_curDate);toast(Object.keys(c.dups).length?'يوجد تكرار — راجع الخانات الحمراء':'لا يوجد أي تكرار ✅')}
 function sb_dayText(c,filter){
-  let t=`📋 *سجل توزيع حصص الانتظار*\n${S.school.school?'مدرسة '+S.school.school:(S.stb.settings.school||'')}\nيوم ${sb_DAYS[c.d]} ${sb_hijri(c.date)}\n`;
+  let t=`📋 *سجل توزيع حصص الانتظار*\n${S.school.school?'مدرسة '+S.school.school:''}\nيوم ${sb_DAYS[c.d]} ${sb_hijri(c.date)}\n`;
   const g={};c.forms.forEach(f=>f.rows.forEach(w=>{if(!w.empty&&!w.cancel&&w.standby!=='-')(g[w.standby]=g[w.standby]||[]).push({...w,for:f.teacher})}));
   Object.keys(g).filter(n=>!filter||n===filter).forEach(n=>{t+=`\n👤 *${n}*\n`;g[n].sort((a,b)=>a.p-b.p).forEach(x=>t+=`• الحصة ${x.p+1}: ${x.cls}${x.room?' – القاعة '+x.room:''} (بدلاً من ${sb_shortName(x.for)})\n`)});
   if(!filter){const none=c.forms.flatMap(f=>f.rows.filter(w=>w.standby==='-').map(w=>`${sb_shortName(f.teacher)} ح${w.p+1}`));if(none.length)t+=`\n⚠️ بدون منتظر: ${none.join('، ')}\n`}
@@ -1953,21 +2016,22 @@ function sb_phonesModal(){
 /* ---- الطباعة: 3 نماذج في كل صفحة كما في الملف ---- */
 function sb_printDay(){
   const c=sb_compute(sb_curDate); if(!c.forms.length){toast('لا يوجد غياب');return}
-  const st=S.stb.settings;
+  const st={formTitle:S.school.sbFormTitle,formNo:S.school.sbFormNo,formCode:S.school.sbFormCode};
   const blocks=c.forms.map(f=>({h:`<div class="sbpf"><p>زملائي المعلمين / نظراً لغياب الأخ الزميل: <span class="tn">${esc(f.teacher)}</span></p>
       <p>لهذا اليوم: <b>${sb_DAYS[c.d]}</b> &nbsp; الموافق: <b>${sb_hijriNum(sb_curDate)}</b></p>
       <p>آمل تسديد مكانه حسب الجدول الموضح والتوقيع بالعلم ولكم جزيل الشكر</p>
       <table class="pt sbt"><colgroup><col style="width:8%"><col style="width:22%"><col style="width:16%"><col><col style="width:15%"><col style="width:9%"></colgroup><thead><tr><th>الحصة</th><th>الصف / الشعبة</th><th>المادة</th><th>المعلم المنتظر</th><th>التوقيع</th><th>القاعة</th></tr></thead>
       <tbody>${f.rows.map(w=>`<tr><td>${w.p+1}</td><td>${w.empty||w.cancel?'':esc(w.cls)}</td><td>${w.empty||w.cancel?'':esc(w.sub)}</td><td>${w.empty||w.cancel||w.standby==='-'?'':esc(w.standby)}</td><td></td><td>${w.empty||w.cancel?'':esc(w.room)}</td></tr>`).join('')}</tbody></table></div>`}));
   const fno=[st.formNo,st.formCode].filter(Boolean).map(esc).join(' &nbsp;—&nbsp; ');
-  printDoc(paged({title:st.formTitle||'سجل توزيع حصص الانتظار',info:fno?`<div class="sbfno">${fno}</div>`:'',blocks,tail:sigs([[S.school.deputyTitle||'وكيل الشؤون التعليمية',st.deputy||S.school.deputy]])}),'portrait','احتياط يوم '+sb_DAYS[c.d]+' '+sb_hijriNum(sb_curDate).replace('هـ',''));
+  printDoc(paged({title:st.formTitle||'سجل توزيع حصص الانتظار',info:fno?`<div class="sbfno">${fno}</div>`:'',blocks,tail:sigs([[S.school.deputyTitle||'وكيل الشؤون التعليمية',S.school.deputy]])}),'portrait','احتياط يوم '+sb_DAYS[c.d]+' '+sb_hijriNum(sb_curDate).replace('هـ',''));
 }
 
 /* ---------- جدول الانتظار ---------- */
 SBP.roster=()=>{
   const d=sb_rosterDay;
   let h=sb_hdr('🗓️ جدول الانتظار','ترتيب أسماء المنتظرين لكل حصة (الأول فالأول)')+'<main>';
-  h+=`<div class="seg" style="margin-bottom:12px">${sb_DAYS.map((n,i)=>`<button class="${i===d?'on':''}" onclick="sb_rosterDay=${i};sb_render()">${n}</button>`).join('')}</div>`;
+  h+=`<div class="seg" style="margin-bottom:12px">${sb_DAYS.map((n,i)=>`<button class="${i===d?'on':''}" onclick="sb_rosterDay=${i};sb_render()">${n}</button>`).join('')}</div>
+  <p class="muted" style="margin:-4px 4px 10px">عدد المنتظرين في كل حصة مفتوح: اضغط ＋ لإضافة أي عدد، و▲▼ لتغيير الترتيب. يمكن أيضاً استيراد الترتيب من Excel في «جداول الحصص».</p>`;
   for(let p=0;p<7;p++){
     const L=S.stb.roster[d][p];
     h+=`<div class="card"><h3>الحصة ${sb_PNAMES[p]}<span class="muted">(${L.length})</span><span class="sp"></span><button class="btn sm" onclick="sb_rosterAdd(${p})">＋</button></h3>
@@ -1983,10 +2047,14 @@ function sb_rosterMove(p,i,dir){const L=S.stb.roster[sb_rosterDay][p],j=i+dir;if
 
 /* ---------- جداول المعلمين ---------- */
 SBP.timetable=()=>{
-  let h=sb_hdr('📚 جداول المعلمين','الصف / الشعبة والمادة لكل حصة','home')+'<main>';
+  let h=sb_hdr('📚 جداول المعلمين','الصف / الشعبة والمادة لكل حصة، وترتيب الانتظار','home')+'<main>';
+  h+=`<div class="card"><h3>📥 استيراد الجداول من Excel</h3>
+   <p class="muted" style="line-height:1.8">1) حمّل النموذج: فيه أسماء المعلمين وجداولهم الحالية.<br>2) في ورقة «جدول المعلمين (صف-شعبة-منتظر)» اكتب في خانة كل حصة: <b>اسم الصف والشعبة</b> إن كانت لديه حصة، أو <b>رقماً</b> (1، 2، 3…) إن كان منتظراً، والرقم هو ترتيبه في الانتظار لتلك الحصة.<br>3) في ورقة «جدول المعلمين ( مادة )» اكتب المادة، وفي ورقة «القاعات» الشعب وقاعاتها.<br>4) اختر الملف بعد التعبئة. يقبل البرنامج أيضاً الأوراق منفصلة: «( صف - شعبة )» و«( منتظر )» و«( مادة )».</p>
+   <div class="row"><button class="btn ghost" onclick="sb_ttTemplate()">⬇️ تحميل نموذج الجداول (Excel)</button><button class="btn" onclick="sb_ttImport()">📂 استيراد ملف الجداول</button></div>
+   <details style="margin-top:8px"><summary class="muted" style="cursor:pointer">طرق استيراد أخرى</summary><div class="row" style="margin-top:8px"><button class="btn ghost sm" onclick="sb_singleImport()">📊 استيراد جدول مفرد (أي ملف)</button><button class="btn ghost sm" onclick="sb_importExcel()">📗 ملف برنامج الانتظار الأصلي (xlsm)</button></div></details></div>`;
   h+=`<div class="seg" style="margin-bottom:12px"><button class="${sb_ttMode==='t'?'on':''}" onclick="sb_ttMode='t';sb_render()">👤 جدول معلم</button><button class="${sb_ttMode==='c'?'on':''}" onclick="sb_ttMode='c';sb_render()">🏫 جدول شعبة</button></div>`;
   if(sb_ttMode==='t'){
-    if(!sb_ttTeacher||!S.stb.teachers.includes(sb_ttTeacher)) sb_ttTeacher=S.stb.teachers[0];
+    if(!sb_ttTeacher||!S.stb.teachers.includes(sb_ttTeacher)) sb_ttTeacher=S.stb.teachers.find(n=>Object.values(S.stb.timetable[n]||{}).some(x=>x[0]))||S.stb.teachers[0];
     const g=S.stb.timetable[sb_ttTeacher]||{}, n=Object.values(g).filter(x=>x[0]).length;
     h+=`<div class="card"><button class="btn ghost" style="width:100%" onclick="sb_picker('اختر المعلم',[{items:sb_teacherItems()}],v=>{sb_ttTeacher=v;sb_render()})">👤 ${esc(sb_ttTeacher||'اختر معلماً')} ▾</button><p class="muted" style="text-align:center">عدد الحصص: <b>${n}</b> — اضغط على أي خانة للتعديل</p></div>`;
     h+=`<div class="card tt"><table><tr><th>اليوم</th>${sb_PNAMES.map((x,i)=>`<th>${i+1}</th>`).join('')}</tr>${sb_DAYS.map((dn,d)=>`<tr><td class="d">${dn}</td>${[...Array(7)].map((_,p)=>{const s=g[d+'-'+p];return s&&(s[0]||s[1])?`<td onclick="sb_editSlot(${d},${p})"><b>${esc(s[0].replace('الصف ',''))}</b><span>${esc(s[1])}</span>${sb_roomOf(s[0])?`<i class="rm">🚪 ${esc(sb_roomOf(s[0]))}</i>`:''}</td>`:`<td class="e" onclick="sb_editSlot(${d},${p})"></td>`}).join('')}</tr>`).join('')}</table></div>`;
@@ -2008,36 +2076,8 @@ function sb_editSlot(d,p){
   mm.querySelector('#ec').oninput=ev=>{const r=sb_roomOf(ev.target.value.trim());mm.querySelector('#ecr').textContent=r?'🚪 القاعة: '+r:''};
 }
 
-/* ---------- المعلمون ---------- */
-let sb_tq='';
-SBP.teachers=()=>{
-  const L=S.stb.teachers.filter(t=>!sb_tq||t.includes(sb_tq));
-  return sb_hdr('👥 أسماء المعلمين',S.stb.teachers.length+' معلماً','home')+`<main><div class="card"><div class="row"><input class="f" style="flex:1" placeholder="🔍 بحث" value="${esc(sb_tq)}" oninput="sb_tq=this.value;sb_render();setTimeout(()=>{const i=document.querySelector('main input');i.focus();i.setSelectionRange(99,99)})"><button class="btn" onclick="sb_editTeacher(-1)">＋ معلم</button><button class="btn ghost" onclick="sb_phonesModal()">📱 الأرقام</button></div><p class="muted" style="margin:8px 0 0">لديهم رقم جوال: ${S.stb.teachers.filter(t=>S.stb.phones[t]).length} من ${S.stb.teachers.length}</p></div>
-  <div class="list">${L.map(t=>{const i=S.stb.teachers.indexOf(t),n=Object.values(S.stb.timetable[t]||{}).filter(x=>x[0]).length;return `<div class="li"><span class="num">${i+1}</span><span class="n">${esc(t)}<br><span class="muted">${n} حصة${S.stb.lab.includes(t)?' • احتياط الاحتياط':''}${S.stb.phones[t]?' • 📱'+esc(S.stb.phones[t]):''}</span></span><button class="ib" onclick="sb_ttTeacher=S.stb.teachers[${i}];sb_ttMode='t';sb_go('timetable')">📚</button><button class="ib" onclick="sb_editTeacher(${i})">✏️</button><button class="ib r" onclick="sb_delTeacher(${i})">🗑</button></div>`}).join('')}</div></main>`;
-};
-function sb_editTeacher(i){
-  const old=i>=0?S.stb.teachers[i]:'';
-  sb_modal(i>=0?'تعديل معلم':'إضافة معلم',`<label class="l">الاسم الكامل</label><input class="f" id="tn" value="${esc(old)}"><label class="l">رقم الجوال (للإرسال عبر واتساب)</label><input class="f" id="tp" inputmode="tel" value="${esc(S.stb.phones[old]||'')}" placeholder="05xxxxxxxx">
-   <div class="row" style="margin-top:12px"><label class="sw"><input type="checkbox" id="tl" ${S.stb.lab.includes(old)?'checked':''}><span></span></label> احتياط الاحتياط ( محضر المختبر )</div>`,
-  [{t:'حفظ',f:m=>{const n=m.querySelector('#tn').value.trim().replace(/\s+/g,' ');if(!n){toast('اكتب الاسم');return false}
-     if(n!==old&&S.stb.teachers.includes(n)){toast('الاسم موجود مسبقاً');return false}
-     if(i<0)S.stb.teachers.push(n);else if(n!==old)sb_renameTeacher(old,n);
-     const ph=m.querySelector('#tp').value.trim();if(ph)S.stb.phones[n]=ph;else delete S.stb.phones[n];
-     const lb=m.querySelector('#tl').checked,li=S.stb.lab.indexOf(n);if(lb&&li<0)S.stb.lab.push(n);if(!lb&&li>=0)S.stb.lab.splice(li,1);
-     sb_save();sb_render();toast('تم الحفظ')}},{t:'إلغاء',cls:'ghost'}]);
-}
-function sb_renameTeacher(o,n){
-  S.stb.teachers[S.stb.teachers.indexOf(o)]=n;
-  if(S.stb.timetable[o]){S.stb.timetable[n]=S.stb.timetable[o];delete S.stb.timetable[o]}
-  if(S.stb.phones[o]){S.stb.phones[n]=S.stb.phones[o];delete S.stb.phones[o]}
-  S.stb.roster.forEach(d=>d.forEach(L=>L.forEach((x,i)=>{if(x===o)L[i]=n})));
-  S.stb.lab=S.stb.lab.map(x=>x===o?n:x);
-  Object.values(S.stb.records).forEach(r=>{r.absent=r.absent.map(x=>x===o?n:x);r.exempt=r.exempt.map(x=>x===o?n:x);
-    const ov={};Object.keys(r.ov||{}).forEach(k=>{const [t,p]=k.split('|');ov[(t===o?n:t)+'|'+p]=r.ov[k]===o?n:r.ov[k]});r.ov=ov;
-    const cc={};Object.keys(r.cancel||{}).forEach(k=>{const [t,p]=k.split('|');cc[(t===o?n:t)+'|'+p]=1});r.cancel=cc;});
-}
-function sb_delTeacher(i){const t=S.stb.teachers[i];sb_ask(`حذف المعلم «${esc(t)}» وجدوله؟ (يبقى اسمه في السجلات السابقة)`,()=>{sb_snap('حُذف المعلم '+sb_shortName(t));S.stb.teachers.splice(i,1);delete S.stb.timetable[t];S.stb.roster.forEach(d=>d.forEach(L=>{const k=L.indexOf(t);if(k>=0)L.splice(k,1)}));S.stb.lab=S.stb.lab.filter(x=>x!==t);sb_save();sb_render()},'حذف')}
-
+/* تعديل اسم منسوب في «المعلمون والإداريون» يُحدّث مراجعه في الاحتياط */
+function sb_renameTeacher(o,n){if(o&&n&&o!==n&&S.stb)sb_renameIn(S.stb,o,n)}
 /* ---------- القاعات ---------- */
 SBP.rooms=()=>sb_hdr('🚪 القاعات','الشعبة — القاعة الدراسية — الدور','home')+`<main><div class="card"><button class="btn" onclick="sb_editRoom(-1)">＋ إضافة شعبة</button></div>
  <div class="card"><table class="t"><tr><th>الشعبة - الفصل</th><th>القاعة</th><th>الدور</th><th></th></tr>${S.stb.rooms.map((r,i)=>`<tr><td style="text-align:right">${esc(r[0])}</td><td><b>${esc(r[1])}</b></td><td>${esc(r[2])}</td><td><button class="ib" onclick="sb_editRoom(${i})">✏️</button></td></tr>`).join('')}</table></div></main>`;
@@ -2047,7 +2087,7 @@ function sb_editRoom(i){const r=i>=0?S.stb.rooms[i]:['','',''];
    ...(i>=0?[{t:'حذف',cls:'red',f:()=>{sb_snap('حُذفت الشعبة');S.stb.rooms.splice(i,1);sb_save();sb_render()}}]:[]),{t:'إلغاء',cls:'ghost'}])}
 
 /* ---------- التقارير ---------- */
-let sb_repSel=null;
+let sb_repSel=null,sb_toolsCard='';
 SBP.reports=()=>{
   const dates=sb_repDates(), s=sb_stats(dates);
   const sb=Object.entries(s.sb).sort((a,b)=>b[1]-a[1]), ab=Object.entries(s.ab).sort((a,b)=>b[1]-a[1]);
@@ -2057,48 +2097,25 @@ SBP.reports=()=>{
   h+=`<div class="card"><select class="f" onchange="sb_repRange=this.value;sb_render()"><option value="all">كل الفصل الدراسي</option>${S.stb.weeks.map((w,i)=>`<option value="${i}" ${String(i)===String(sb_repRange)?'selected':''}>الأسبوع ${i+1} — ${sb_hijri(w)}</option>`).join('')}</select>
    <div class="stat" style="margin-top:10px"><div><b>${dates.filter(d=>(sb_rec(d)||{absent:[]}).absent.length).length}</b>يوم بغياب</div><div><b>${ab.reduce((a,x)=>a+x[1],0)}</b>حالة غياب</div><div><b>${tot}</b>حصة انتظار</div></div>
    <div class="row" style="margin-top:10px"><button class="btn gold sm" onclick="sb_printReport()">🖨️ طباعة التقرير</button></div></div>`;
+  sb_toolsCard=`<div class="card"><h3>🧰 أدوات الاحتياط</h3><div class="row"><button class="btn ghost sm" onclick="sb_importJSON()">⬆️ فتح ملف بيانات تطبيق «سجل الانتظار»</button><button class="btn ghost sm" onclick="sb_exportJSON()">⬇️ حفظ بيانات الاحتياط</button>
+   <button class="btn red sm" onclick="sb_ask('مسح سجل الغياب لجميع الأيام (فصل/عام جديد)؟',()=>{sb_snap('مُسح سجل الغياب');S.stb.records={};sb_save();sb_render();toast('تم المسح')},'مسح')">🗑️ مسح سجل الغياب</button></div></div>`;
   h+=`<div class="card"><h3>🧑‍🏫 عدد حصص الانتظار لكل معلم</h3>${sb.length?sb.map(([n,v])=>`<div style="margin:8px 0;cursor:pointer" onclick="sb_repSel=sb_repSel==='${esc(n)}'?null:'${esc(n)}';sb_render()"><div class="row"><span style="flex:1;font-weight:600">${esc(n)}</span><b>${v}</b></div><div class="bar"><i style="width:${v/mx*100}%"></i></div>
      ${sb_repSel===n?`<table class="t" style="margin-top:6px"><tr><th>التاريخ</th><th>الحصة</th><th>الصف</th><th>بدلاً من</th></tr>${s.det[n].map(x=>`<tr><td>${sb_DAYS[sb_wday(x.date)]}<br><span class="muted">${sb_hijriNum(x.date)}</span></td><td>${x.p+1}</td><td>${esc(x.cls)}</td><td>${esc(sb_shortName(x.for))}</td></tr>`).join('')}</table>`:''}</div>`).join(''):'<p class="muted">لا توجد بيانات.</p>'}
      ${zero.length?`<p class="muted" style="margin-top:12px">منتظرون لم يُسند لهم أي حصة: ${zero.map(sb_shortName).map(esc).join('، ')}</p>`:''}</div>`;
   h+=`<div class="card"><h3>🚫 عدد أيام الغياب لكل معلم</h3>${ab.length?`<table class="t"><tr><th>المعلم</th><th>أيام الغياب</th></tr>${ab.map(([n,v])=>`<tr><td style="text-align:right">${esc(n)}</td><td><b>${v}</b></td></tr>`).join('')}</table>`:'<p class="muted">لا يوجد.</p>'}</div>`;
+  h+=sb_toolsCard;
   return h+'</main>';
 };
 function sb_repDates(){const all=Object.keys(S.stb.records).sort();if(sb_repRange==='all')return all;const w=S.stb.weeks[+sb_repRange];return all.filter(d=>d>=w&&d<=sb_addDays(w,6))}
 function sb_printReport(){const dates=sb_repDates(),st=sb_stats(dates);
   const rows=S.stb.teachers.map(t=>[t,st.sb[t]||0,st.ab[t]||0]).filter(x=>x[1]||x[2]).sort((a,b)=>b[1]-a[1]);
   if(!rows.length)return toast('لا توجد بيانات');
-  printDoc(paged({title:'تقرير حصص الانتظار والغياب — '+(sb_repRange==='all'?'الفصل الدراسي':'الأسبوع '+(+sb_repRange+1)),blocks:[{tbl:true,cls:'big',cg:'<colgroup><col style="width:7%"><col><col style="width:20%"><col style="width:18%"></colgroup>',thead:'<tr><th>م</th><th>اسم المعلم</th><th>عدد حصص الانتظار</th><th>أيام الغياب</th></tr>',units:rows.map((r,i)=>`<tr><td>${i+1}</td><td class="r">${esc(r[0])}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`)}],tail:sigs([[S.school.deputyTitle||'وكيل الشؤون التعليمية',S.stb.settings.deputy||S.school.deputy],['مدير المدرسة',S.school.principal]])}),'portrait','تقرير الانتظار')}
+  printDoc(paged({title:'تقرير حصص الانتظار والغياب — '+(sb_repRange==='all'?'الفصل الدراسي':'الأسبوع '+(+sb_repRange+1)),blocks:[{tbl:true,cls:'big',cg:'<colgroup><col style="width:7%"><col><col style="width:20%"><col style="width:18%"></colgroup>',thead:'<tr><th>م</th><th>اسم المعلم</th><th>عدد حصص الانتظار</th><th>أيام الغياب</th></tr>',units:rows.map((r,i)=>`<tr><td>${i+1}</td><td class="r">${esc(r[0])}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`)}],tail:sigs([[S.school.deputyTitle||'وكيل الشؤون التعليمية',S.school.deputy],['مدير المدرسة',S.school.principal]])}),'portrait','تقرير الانتظار')}
 
 /* ---------- الإعدادات / البيانات الرئيسية ---------- */
-SBP.settings=()=>{
-  const st=S.stb.settings, F=(k,l,ph='')=>`<label class="l">${l}</label><input class="f" value="${esc(st[k]||'')}" placeholder="${esc(ph)}" onchange="S.stb.settings['${k}']=this.value.trim();sb_save();toast('تم الحفظ')">`;
-  return sb_hdr('⚙️ إعدادات الاحتياط','النموذج والأسابيع والاستيراد')+`<main>
-  <div class="card"><h3>🖨️ نموذج الاحتياط المطبوع</h3><p class="muted">بيانات المدرسة والإطار الرسمي تُؤخذ من «البيانات الأساسية» في سجل المعلمين.</p>${F('formTitle','عنوان النموذج','سجل توزيع حصص الانتظار')}${F('formNo','رقم النموذج')}${F('formCode','رمز النموذج')}${F('deputy','وكيل الشؤون التعليمية (يوقّع النموذج)',S.school.deputy||'')}</div>
-  <div class="card"><h3>📅 أسابيع الفصل الدراسي<span class="sp"></span><button class="btn sm" onclick="sb_addWeeks()">＋ إضافة</button></h3>
-   <p class="muted">كل أسبوع يبدأ يوم الأحد، وتُولَّد أيامه الخمسة تلقائياً.</p>
-   <div class="list">${S.stb.weeks.map((w,i)=>`<div class="li"><span class="num">${i+1}</span><span class="n">الأسبوع ${i+1}<br><span class="muted">${sb_hijri(w)} ← ${sb_hijri(sb_addDays(w,4))}</span></span><button class="ib r" onclick="sb_snap('حُذف الأسبوع ${i+1}');S.stb.weeks.splice(${i},1);sb_save();sb_render()">✕</button></div>`).join('')}</div></div>
-  <div class="card"><h3>👥 مزامنة الأسماء مع سجل المعلمين</h3><p class="muted">يضيف إلى قائمة الاحتياط من ليس فيها من المعلمين والإداريين المسجلين في البرنامج، مع أرقام جوالاتهم.</p><button class="btn" onclick="sb_syncNames()">🔄 مزامنة الأسماء</button></div>
-  <div class="card"><h3>💾 بيانات الاحتياط</h3><p class="muted">تُحفظ بيانات الاحتياط مع بيانات سجل المعلمين وتُزامن معها عبر Dropbox.</p>
-   <div class="row"><button class="btn" onclick="sb_exportJSON()">⬇️ حفظ ملف بيانات الاحتياط</button><button class="btn ghost" onclick="sb_importJSON()">⬆️ فتح ملف بيانات (من تطبيق سجل الانتظار)</button></div></div>
-  <div class="card"><h3>📥 استيراد جدول مفرد</h3><p class="muted">من أي ملف Excel أو CSV: أسماء المعلمين، جدول الحصص (الشعب أو المواد)، القاعات، أو جدول الانتظار. تختار الورقة ونوع الجدول، ويحدد البرنامج الأعمدة تلقائياً ويمكنك تعديلها.</p>
-   <button class="btn" onclick="sb_singleImport()">📊 استيراد جدول مفرد</button></div>
-  <div class="card"><h3>📥 استيراد من ملف Excel</h3><p class="muted">اختر ملف برنامج الانتظار الأصلي (xlsm) لتحديث المعلمين والجداول والقاعات وجدول الانتظار والأسابيع وسجل الغياب.</p>
-   <button class="btn gold" onclick="sb_importExcel()">📗 استيراد ملف Excel</button></div>
-  <div class="card"><h3>🧹 أدوات</h3><div class="row">
-   <button class="btn red" onclick="sb_ask('مسح سجل الغياب لجميع الأيام (فصل/عام جديد)؟',()=>{S.stb.records={};sb_save();sb_render();toast('تم المسح')},'مسح')">مسح سجل الغياب</button>
-   ${SB_SEED?`<button class="btn red" onclick="sb_ask('إعادة بيانات الاحتياط إلى النسخة الأصلية؟ سيتم فقد التعديلات.',()=>{S.stb=sb_fixDB(clone(SB_SEED));sb_save();sb_render()},'استعادة')">استعادة البيانات الأصلية</button>`:''}</div></div></main>`;
-};
-function sb_addWeeks(){
-  const last=S.stb.weeks.length?sb_addDays(S.stb.weeks[S.stb.weeks.length-1],7):sb_todayIso();
-  sb_hijriPicker('تاريخ بداية الأسبوع (الأحد)',last,d=>{
-    while(sb_wday(d)!==0) d=sb_addDays(d,-1);
-    sb_modal('عدد الأسابيع',`<p>البداية: <b>${sb_hijri(d)}</b></p><label class="l">عدد الأسابيع المتتالية</label><input class="f" id="wn" type="number" value="1" min="1" max="30">`,
-     [{t:'إضافة',f:m=>{const n=+m.querySelector('#wn').value||1;for(let k=0;k<n;k++){const w=sb_addDays(d,7*k);if(!S.stb.weeks.includes(w))S.stb.weeks.push(w)}S.stb.weeks.sort();sb_save();sb_render()}},{t:'إلغاء',cls:'ghost'}]);
-  });
-}
 function sb_exportJSON(){sb_dl('بيانات_الانتظار_'+sb_todayIso()+'.json',JSON.stringify(S.stb),'application/json');toast('تم حفظ الملف')}
 function sb_pickFile(accept,cb){let f=$('#fileIn');if(!f){f=document.createElement('input');f.type='file';f.id='fileIn';f.hidden=true;document.body.appendChild(f)}if(IOS&&/json/.test(accept))accept='';f.accept=accept;f.value='';f.onchange=()=>f.files[0]&&cb(f.files[0]);f.click()}
-function sb_importJSON(){sb_pickFile('.json,application/json',async file=>{try{const d=JSON.parse(await file.text());if(d.stb)d=d.stb;if(!d.teachers||!d.roster)throw 0;sb_ask('استبدال بيانات الاحتياط الحالية ببيانات الملف؟',()=>{S.stb=sb_fixDB(d);sb_save();sb_render();toast('تم فتح الملف ✅')},'استبدال')}catch(e){toast('ملف غير صالح')}})}
+function sb_importJSON(){sb_pickFile('.json,application/json',async file=>{try{const d=JSON.parse(await file.text());if(d.stb)d=d.stb;if(!d.roster||!d.timetable)throw 0;sb_ask('استبدال بيانات الاحتياط (الجداول والقاعات وجدول الانتظار والغياب) ببيانات الملف؟ الأسماء والجوالات تُدمج مع «المعلمون والإداريون».',()=>{S.stb=sb_fixDB(d);sb_save();sb_render();sb_unifyMsg();toast('تم فتح الملف ✅')},'استبدال')}catch(e){toast('ملف غير صالح')}})}
 
 /* ---- قارئ ملفات Excel (بدون مكتبات) ---- */
 async function sb_unzip(buf){
@@ -2142,10 +2159,9 @@ const sb_xs=v=>v===undefined||v===null||v===false||v===true?'':String(v).trim();
 const sb_xd=v=>typeof v==='number'&&v>20000?sb_iso(new Date(Math.round((v-25569)*864e5)+12*36e5)):'';
 function sb_importExcel(){sb_pickFile('.xlsm,.xlsx',async file=>{
   try{toast('جارٍ قراءة الملف…');const SX=await sb_readXlsx(await file.arrayBuffer());const sh=n=>SX[n.replace(/\s+/g,'')];
-    const d=sb_fixDB(clone(S.stb)),m=sh('البيانات الرئيسية');
-    if(m){const k={dept:'E6',year:'E7',term:'E8',school:'E9',principal:'E10',deputy:'E11'};for(const x in k)if(sb_xs(m(k[x])))d.settings[x]=sb_xs(m(k[x]));
-      const w=[];for(let r=7;r<=40;r++){const v=sb_xd(m('I'+r));if(v)w.push(v)}if(w.length)d.weeks=w;}
-    const tn=sh('أسماء المعلمين');if(tn){const L=[];for(let r=4;r<=200;r++){const v=sb_xs(tn('B'+r));if(v&&v!=='-'&&v!=='0'&&!L.includes(v))L.push(v)}if(L.length)d.teachers=L;}
+    const d=JSON.parse(JSON.stringify(S.stb)),m=sh('البيانات الرئيسية');d.teachers=[];d.settings={};
+    if(m){const w=[];for(let r=7;r<=40;r++){const v=sb_xd(m('I'+r));if(v)w.push(v)}if(w.length)d.weeks=w;}
+    const tn=sh('أسماء المعلمين');if(tn){for(let r=4;r<=200;r++){const v=sb_xs(tn('B'+r));if(v&&v!=='-'&&v!=='0'&&!d.teachers.includes(v))d.teachers.push(v)}}
     const C=sh('جدول المعلمين ( الصف-الشعبة )'),U=sh('جدول المعلمين ( مادة )');
     if(C){d.timetable={};for(let r=4;r<=200;r++){const n=sb_xs(C('B'+r));if(!n||n==='-'||n==='0')continue;const g={};
       for(let dd=0;dd<5;dd++)for(let p=0;p<7;p++){const col=sb_cn(3+dd*7+p);let c=sb_xs(C(col+r)),s=U?sb_xs(U(col+r)):'';if(c==='0')c='';if(s==='0')s='';if(c||s)g[dd+'-'+p]=[c,s]}
@@ -2155,8 +2171,10 @@ function sb_importExcel(){sb_pickFile('.xlsm,.xlsx',async file=>{
     let nr=0;sb_DAYS.forEach(dn=>{const B=sh('قاعدة بيانات يوم ( '+dn+' )');if(!B)return;for(let r=2;r<=200;r++){const dt=sb_xd(B('A'+r));if(!dt)continue;
       const ab=['B','C','D','E','F','G','O','P','Q'].map(c=>sb_xs(B(c+r))).filter(x=>x&&x!=='0'),ex=['H','I','J','K','L','M'].map(c=>sb_xs(B(c+r))).filter(x=>x&&x!=='0');
       if(ab.length||ex.length){const old=d.records[dt]||{ov:{},cancel:{}};d.records[dt]={absent:ab,exempt:ex,ov:old.ov||{},cancel:old.cancel||{}};nr++}}});
-    sb_ask(`تمت قراءة الملف: ${d.teachers.length} معلماً، ${d.rooms.length} شعبة، ${d.weeks.length} أسبوعاً، ${nr} يوم غياب. اعتماد البيانات؟`,()=>{S.stb=d;sb_save();sb_render();toast('تم الاستيراد ✅')},'اعتماد');
+    sb_ask(`تمت قراءة الملف: ${d.teachers.length} اسماً، ${d.rooms.length} شعبة، ${nr} يوم غياب. اعتماد البيانات؟<br><span class="muted">الأسماء تُطابق مع «المعلمون والإداريون» ويُضاف غير الموجود منها.</span>`,()=>{sb_snap('استيراد ملف Excel');S.stb=sb_fixDB(d);sb_save();sb_render();sb_unifyMsg();toast('تم الاستيراد ✅')},'اعتماد');
   }catch(e){console.error(e);toast('تعذر قراءة الملف — تأكد أنه ملف Excel صحيح')}})}
+function sb_unifyMsg(){const u=window._sbUnify;window._sbUnify=null;if(!u)return;
+  sb_modal('دمج الأسماء مع «المعلمون والإداريون»',`${u.renamed.length?`<p><b>طوبقت ${u.renamed.length} أسماء مكتوبة بطريقة مختلفة:</b></p><div class="muted" style="line-height:1.9">${u.renamed.map(([a,b])=>esc(a)+' ← '+esc(b)).join('<br>')}</div>`:''}${u.added.length?`<p><b>أُضيف ${u.added.length} اسماً جديداً</b> (راجع تخصصهم وفئتهم في «المعلمون والإداريون»):</p><div class="muted" style="line-height:1.9">${u.added.map(esc).join('<br>')}</div>`:''}`,[{t:'تم'}])}
 
 /* ---------- استيراد جدول مفرد (أي ملف) ---------- */
 const sb_WTYPES={teachers:'👥 أسماء المعلمين',cls:'📚 جدول الحصص — الصف / الشعبة',sub:'📚 جدول الحصص — المادة',both:'📚 جدول الحصص — الصف والمادة في خلية واحدة',rooms:'🚪 القاعات',roster:'🗓️ جدول الانتظار (الاحتياط)'};
@@ -2164,7 +2182,7 @@ let sb_WZ=null;
 function sb_dayIdx(v){const s=sb_normName(sb_xs(v)).replace(/\s/g,'').replace(/^يوم/,'');return ['الاحد','الاثنين','الثلاثاء','الاربعاء','الخميس'].findIndex(x=>s===x||s==='ال'+x.slice(2)||s===x.slice(2))}
 function sb_resolveName(n,add,added){n=sb_xs(n).replace(/\s+/g,' ');if(!n||n==='-'||n==='0')return null;
   if(S.stb.teachers.includes(n))return n;const f=sb_normName(n).replace(/\s/g,'');const h=S.stb.teachers.find(t=>sb_normName(t).replace(/\s/g,'')===f);if(h)return h;
-  if(add){S.stb.teachers.push(n);added&&added.push(n);return n}return null}
+  if(add){sb_addTeacher(n);added&&added.push(n);return n}return null}
 function sb_wzCell(c,r){const sh=sb_WZ.book[sb_WZ.si];return sh.cells[sb_cn(c)+r]}
 const sb_isHeadName=v=>/^(م|#|ر|المعلم|اسم المعلم|الاسم|المعلمون|اسم|الرقم)$/.test(sb_xs(v));
 function sb_wzGuess(){
@@ -2224,7 +2242,7 @@ function sb_wzDraw(){
 /* dry=true: معاينة فقط بدون تعديل */
 function sb_wzRun(dry){
   const P=sb_WZ.p,T=sb_WZ.type,sh=sb_WZ.book[sb_WZ.si],save0=dry?JSON.stringify(S.stb):null,added=[];let count=0,text='';
-  try{
+  sb_DRY=!!dry;try{
   if(T==='teachers'){for(let r=+P.startRow;r<=sh.maxR;r++){const v=sb_xs(sb_wzCell(sb_colNum(P.nameCol),r));if(!v||sb_isHeadName(v)||/\d/.test(v))continue;if(sb_resolveName(v,true,added))count++}
     text=`سيُقرأ ${count} اسماً، منها ${added.length} اسماً جديداً يُضاف.`}
   if(T==='cls'||T==='sub'||T==='both'){
@@ -2250,22 +2268,88 @@ function sb_wzRun(dry){
       for(let p=0;p<np;p++){const t=sb_resolveName(sb_wzCell(fc+p,r),P.addNew,added);if(t&&!R[cur][p].includes(t)){R[cur][p].push(t);got.add(cur);count++}}}
     got.forEach(d=>S.stb.roster[d]=R[d]);
     text=count?`سيُقرأ ${count} اسماً في جدول الانتظار لأيام: ${[...got].sort().map(d=>sb_DAYS[d]).join('، ')}${added.length?`، منها ${added.length} اسماً غير موجود في قائمة المعلمين`:''}.`:'لم يُعثر على أسماء — تأكد من عمود اليوم وعمود الحصة الأولى.'}
-  }finally{if(dry)S.stb=JSON.parse(save0),sb_fixDB(S.stb)}
+  }finally{if(dry){S.stb=sb_fixDB(JSON.parse(save0))}sb_DRY=false;sb_tmp=[]}
   return {count,text};
 }
 function sb_wzApply(){const pv=sb_wzRun(true);if(!pv.count){toast('لا توجد بيانات للاستيراد بهذه الإعدادات');return false}
   sb_snap('استيراد '+sb_WTYPES[sb_WZ.type].replace(/^\S+\s/,''));sb_wzRun(false);sb_save();sb_render();toast('تم الاستيراد ✅')}
 
-/* ---------- مزامنة الأسماء مع سجل المعلمين ---------- */
-function sb_syncNames(){let n=0,p=0;const k=x=>sb_normName(x).replace(/\s/g,'');
-  S.teachers.forEach(t=>{const nm=String(t.name||'').trim().replace(/\s+/g,' ');if(!nm)return;let hit=S.stb.teachers.find(x=>k(x)===k(nm));if(!hit){S.stb.teachers.push(nm);hit=nm;n++}
-    if(t.phone&&!S.stb.phones[hit]){S.stb.phones[hit]=t.phone;p++}});sb_save();sb_render();toast('أُضيف '+n+' اسماً و'+p+' رقم جوال')}
+/* ---------- استيراد الجداول من Excel: صف وشعبة + مادة + ترتيب الانتظار + القاعات ----------
+   الشبكة: عمود اسم المعلم ثم 35 خانة (5 أيام × 7 حصص). في ورقة «صف - شعبة - منتظر»: نص = الصف والشعبة، ورقم = ترتيبه في الانتظار. */
+const SB_TPL={grid:'جدول المعلمين (صف-شعبة-منتظر)',sub:'جدول المعلمين ( مادة )',rooms:'القاعات',help:'تعليمات'};
+function sb_gridParse(b){const W=x=>{x=sb_xs(x);return /[؀-ۿ]/.test(x)&&x.split(/\s+/).length>=2&&!/\d/.test(x)};
+  let nc=0,best=-1;for(let c=1;c<=Math.min(4,b.maxC);c++){let k=0;for(let r=1;r<=Math.min(b.maxR,200);r++)if(W(b.cells[sb_cn(c)+r])&&!sb_isHeadName(b.cells[sb_cn(c)+r]))k++;if(k>best){best=k;nc=c}}
+  let hdr=0;for(let r=1;r<=Math.min(b.maxR,15);r++){let k=0;for(let c=1;c<=b.maxC;c++)if(sb_dayIdx(b.cells[sb_cn(c)+r])>=0)k++;if(k>=2)hdr=r}
+  let fc=nc+1;if(hdr){for(let c=1;c<=b.maxC;c++)if(sb_dayIdx(b.cells[sb_cn(c)+hdr])===0){fc=c;break}}
+  const rows=[];for(let r=1;r<=b.maxR;r++){const n=sb_xs(b.cells[sb_cn(nc)+r]).replace(/\s+/g,' ');if(!W(n)||sb_isHeadName(n)||sb_dayIdx(n)>=0||/جدول|المعلمين|الحصص/.test(n)||r<=hdr)continue;
+    const v=[];for(let i=0;i<35;i++){let x=b.cells[sb_cn(fc+i)+r];x=x===undefined||x===null||x===false?'':x;v.push(typeof x==='number'?x:sb_xs(x))}rows.push([n,v])}
+  return rows}
+const sb_rank=x=>{if(typeof x==='number')return x>0&&x<100?Math.round(x):0;const t=String(x).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).trim();return /^\d{1,2}$/.test(t)?+t:0};
+function sb_ttImport(){sb_pickFile('.xlsx,.xlsm',async file=>{
+  try{toast('جارٍ قراءة الملف…');const book=(await sb_readBook(await file.arrayBuffer())).filter(b=>b.maxR>0);const nm=b=>sb_normName(b.name).replace(/\s/g,'');
+    const pick=(yes,no)=>{const L=book.filter(b=>/^جدولالمعلمين/.test(nm(b))&&yes.test(nm(b))&&!(no&&no.test(nm(b)))).map(b=>[b,sb_gridParse(b).length]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);return L.length?L[0][0]:null};
+    const G=pick(/(منتظر|انتظار).*(صف|شعب)|(صف|شعب).*(منتظر|انتظار)/),C=G||pick(/صف|شعب/,/ماده|منتظر|انتظار/),R=G?null:pick(/منتظر|انتظار/,/صف|شعب/),U=pick(/ماده/,/صف|شعب|منتظر/),Q=book.find(b=>/قاعات/.test(nm(b)));
+    if(!C&&!U&&!R&&!Q){toast('لم أجد أوراق الجداول — استخدم نموذج البرنامج');return}
+    const T={},roster=[...Array(5)].map(()=>[...Array(7)].map(()=>[]));let nRank=0,nCls=0,nSub=0;const names=new Set();
+    const put=(n,i)=>{const k=Math.floor(i/7)+'-'+(i%7);T[n]=T[n]||{};T[n][k]=T[n][k]||['',''];return T[n][k]};
+    if(C)sb_gridParse(C).forEach(([n,v])=>{names.add(n);v.forEach((x,i)=>{if(x===''||x==='-'||x==='0'||x===0)return;const rk=sb_rank(x);if(rk){roster[Math.floor(i/7)][i%7].push([rk,n]);nRank++}else{put(n,i)[0]=String(x);nCls++}})});
+    if(R)sb_gridParse(R).forEach(([n,v])=>{names.add(n);v.forEach((x,i)=>{const rk=sb_rank(x);if(rk){roster[Math.floor(i/7)][i%7].push([rk,n]);nRank++}})});
+    if(U)sb_gridParse(U).forEach(([n,v])=>{names.add(n);v.forEach((x,i)=>{if(x===''||x==='-'||x==='0'||x===0||sb_rank(x))return;put(n,i)[1]=String(x);nSub++})});
+    let rooms=null;if(Q){rooms=[];for(let r=1;r<=Q.maxR;r++){const a=sb_xs(Q.cells['A'+r]);if(!a||/^الشعب|^الصف\s*\/|^الفصل$|الشعبة\s*-\s*الفصل/.test(a))continue;rooms.push([a,sb_xs(Q.cells['B'+r]),sb_xs(Q.cells['C'+r])])}}
+    const tn=[...names];const res=tn.map(n=>({n,t:sb_match(n)}));const miss=res.filter(x=>!x.t).map(x=>x.n);
+    sb_modal('📥 استيراد الجداول',`<p>📄 ${esc(file.name)}</p><div class="alert g" style="line-height:1.9">المعلمون في الملف: <b>${tn.length}</b><br>${C?`حصص الصف/الشعبة: <b>${nCls}</b><br>`:''}${U?`حصص المادة: <b>${nSub}</b><br>`:''}${nRank?`خانات الانتظار: <b>${nRank}</b> (يُستبدل جدول الانتظار بالكامل)<br>`:''}${rooms?`القاعات: <b>${rooms.length}</b>`:''}</div>
+      ${miss.length?`<div class="alert y">أسماء غير موجودة في «المعلمون والإداريون» وستُضاف (${miss.length}):<br>${miss.map(esc).join('، ')}</div>`:''}<p class="muted">جداول المعلمين الموجودين في الملف تُستبدل بما فيه، وتبقى جداول غيرهم كما هي.</p>`,
+      [{t:'✅ اعتماد',f:()=>{sb_snap('استيراد الجداول');const nameOf=n=>{const m=sb_match(n);return m?m.name:sb_addTeacher(n)};
+        Object.keys(T).forEach(n=>{S.stb.timetable[nameOf(n)]=T[n]});tn.filter(n=>!T[n]).forEach(n=>{if(C)S.stb.timetable[nameOf(n)]={}});
+        if(nRank)for(let d=0;d<5;d++)for(let p=0;p<7;p++)S.stb.roster[d][p]=roster[d][p].sort((a,b)=>a[0]-b[0]).map(x=>nameOf(x[1])).filter((x,i,a)=>a.indexOf(x)===i);
+        if(rooms&&rooms.length)S.stb.rooms=rooms;sb_save();sb_render();toast('تم استيراد الجداول ✅')}},{t:'إلغاء',cls:'ghost'}]);
+  }catch(e){console.error(e);toast('تعذر قراءة الملف — احفظه بصيغة xlsx')}})}
+/* كاتب xlsx بسيط بدون مكتبات (يعمل بدون إنترنت وعلى كل الأجهزة) */
+const sb_crcT=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function sb_crc(u){let c=0xFFFFFFFF;for(let i=0;i<u.length;i++)c=sb_crcT[(c^u[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0}
+function sb_zip(files){const te=new TextEncoder(),parts=[],cen=[];let off=0;
+  files.forEach(([name,txt])=>{const nb=te.encode(name),d=te.encode(txt),crc=sb_crc(d);const h=new DataView(new ArrayBuffer(30));
+    h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x800,true);h.setUint32(14,crc,true);h.setUint32(18,d.length,true);h.setUint32(22,d.length,true);h.setUint16(26,nb.length,true);
+    parts.push(new Uint8Array(h.buffer),nb,d);const c=new DataView(new ArrayBuffer(46));c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint16(8,0x800,true);c.setUint32(16,crc,true);c.setUint32(20,d.length,true);c.setUint32(24,d.length,true);c.setUint16(28,nb.length,true);c.setUint32(42,off,true);
+    cen.push(new Uint8Array(c.buffer),nb);off+=30+nb.length+d.length});
+  const cs=cen.reduce((a,x)=>a+x.length,0);const e=new DataView(new ArrayBuffer(22));e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cs,true);e.setUint32(16,off,true);
+  return new Blob([...parts,...cen,new Uint8Array(e.buffer)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}
+function sb_xlsx(sheets){const X=v=>String(v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const sx=sh=>{const rows=sh.rows.map((r,i)=>`<row r="${i+1}">${r.map((v,j)=>{if(v===''||v==null)return '';const ref=sb_cn(j+1)+(i+1),st=i<(sh.hdr||0)?' s="1"':'';return typeof v==='number'?`<c r="${ref}"${st}><v>${v}</v></c>`:`<c r="${ref}" t="inlineStr"${st}><is><t xml:space="preserve">${X(v)}</t></is></c>`}).join('')}</row>`).join('');
+    const fr=sh.freeze?`<pane xSplit="${sh.freeze[0]}" ySplit="${sh.freeze[1]}" topLeftCell="${sb_cn(sh.freeze[0]+1)}${sh.freeze[1]+1}" activePane="bottomLeft" state="frozen"/>`:'';
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView rightToLeft="1" workbookViewId="0">${fr}</sheetView></sheetViews>${sh.cols?`<cols>${sh.cols.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('')}</cols>`:''}<sheetData>${rows}</sheetData>${sh.merges&&sh.merges.length?`<mergeCells count="${sh.merges.length}">${sh.merges.map(m=>`<mergeCell ref="${m}"/>`).join('')}</mergeCells>`:''}</worksheet>`};
+  const f=[['[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((s,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`],
+    ['_rels/.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ['xl/workbook.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>${sheets.map((s,i)=>`<sheet name="${X(s.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((s,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ['xl/styles.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF008A76"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`]];
+  sheets.forEach((s,i)=>f.push(['xl/worksheets/sheet'+(i+1)+'.xml',sx(s)]));return sb_zip(f)}
+function sb_ttTemplate(){try{
+  const T=sb_T().filter(n=>!sb_tmp.includes(n)),rk={};S.stb.roster.forEach((x,d)=>x.forEach((L,p)=>L.forEach((n,i)=>{rk[n+'|'+d+'-'+p]=i+1})));
+  const head=t=>{const r1=[t],r2=['م','اسم المعلم'],r3=['',''];sb_DAYS.forEach(d=>{for(let p=0;p<7;p++){r2.push(p?'':d);r3.push(p+1)}});return [r1,r2,r3]};
+  const merges=['A1:AK1','A2:A3','B2:B3'].concat([0,1,2,3,4].map(d=>sb_cn(3+d*7)+'2:'+sb_cn(9+d*7)+'2'));
+  const grid=(name,title,cell)=>{const A=head(title);T.forEach((n,i)=>{const g=S.stb.timetable[n]||{};const row=[i+1,n];for(let d=0;d<5;d++)for(let p=0;p<7;p++)row.push(cell(n,g[d+'-'+p],d,p));A.push(row)});
+    return {name,rows:A,hdr:3,merges,freeze:[2,3],cols:[4,32].concat(Array(35).fill(14))}};
+  const help=['طريقة تعبئة نموذج الجداول — برنامج «سجل المعلمين» / قسم الاحتياط','',
+    '1- ورقة «'+SB_TPL.grid+'»: صف لكل معلم، و35 خانة = 5 أيام × 7 حصص (الأحد من الحصة 1 إلى 7، ثم الإثنين ...).',
+    '2- إذا كانت للمعلم حصة: اكتب الصف والشعبة كما في ورقة القاعات، مثل: الصف الأول شعبة 1',
+    '3- إذا كان المعلم منتظراً في تلك الحصة: اكتب رقماً فقط (1، 2، 3 ...) وهو ترتيبه في الانتظار؛ رقم 1 يُسند له أولاً. لا يوجد حد لعدد المنتظرين.',
+    '4- اترك الخانة فارغة إذا لم يكن لديه حصة ولا انتظار.',
+    '5- ورقة «'+SB_TPL.sub+'»: نفس الترتيب، واكتب اسم المادة في خانات الحصص.',
+    '6- ورقة «القاعات»: الشعبة، ثم القاعة، ثم الدور.',
+    '7- يمكن بدلاً من الورقة الأولى استخدام ورقتين منفصلتين: «جدول المعلمين ( صف - شعبة )» و«جدول المعلمين ( منتظر )».',
+    '8- الأسماء تُطابق مع «المعلمون والإداريون» في البرنامج، والاسم غير الموجود يُضاف تلقائياً.'].map(x=>[x]);
+  const blob=sb_xlsx([grid(SB_TPL.grid,'جدول المعلمين — الصف والشعبة، أو رقم ترتيب الانتظار',(n,s,d,p)=>s&&s[0]?s[0]:(rk[n+'|'+d+'-'+p]||'')),
+    grid(SB_TPL.sub,'جدول المعلمين — المادة',(n,s)=>s&&s[1]?s[1]:''),
+    {name:SB_TPL.rooms,rows:[['الشعبة - الفصل','القاعة الدراسية','الدور']].concat(S.stb.rooms.map(r=>[r[0],r[1],r[2]])),hdr:1,cols:[30,16,10]},
+    {name:SB_TPL.help,rows:help,cols:[120]}]);
+  dl(blob,'نموذج_جداول_المعلمين.xlsx');toast('تم تجهيز النموذج')}catch(e){console.error(e);toast('تعذر تجهيز النموذج')}}
 /* ---------- إنشاء بيانات الاحتياط أول مرة: من تطبيق «سجل الانتظار» على نفس الجهاز/الرابط إن وُجد ---------- */
 function sb_newDB(){let d=null,from='';try{const x=localStorage.getItem('intidhar_db_v1');if(x){d=JSON.parse(x);from='app'}}catch(e){}
   if(!d&&SB_SEED){d=clone(SB_SEED);from='seed'}d=sb_fixDB(d||{});if(from==='app')setTimeout(()=>toast('تم نقل بيانات تطبيق «سجل الانتظار» إلى قسم الاحتياط'),800);return d}
 (function(){if(!S.stb){S.stb=sb_newDB();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}else sb_fixDB(S.stb)})();
 /* ---------- صفحات القسم داخل سجل المعلمين ---------- */
-const SB_PAGES={sbdaily:['daily','الاحتياط اليومي'],sbroster:['roster','جدول الانتظار'],sbtt:['timetable','جداول الحصص'],sbnames:['teachers','أسماء المنتظرين والجوالات'],sbrooms:['rooms','القاعات'],sbrep:['reports','تقارير الاحتياط'],sbset:['settings','إعدادات الاحتياط']};
+const SB_PAGES={sbdaily:['daily','الاحتياط اليومي'],sbroster:['roster','جدول الانتظار'],sbtt:['timetable','جداول الحصص'],sbrooms:['rooms','القاعات'],sbrep:['reports','تقارير الاحتياط']};
 Object.entries(SB_PAGES).forEach(([k,[p,n]])=>{PAGES[k]=function(){if(!S.stb)S.stb=sb_newDB();sb_fixDB(S.stb);const h=SBP[p]();setView(n,'<div class="sbx">'+h.replace(/<\/?main>/g,'')+'</div>')}});
 
 /* ================= PRINT PREVIEW ================= */
